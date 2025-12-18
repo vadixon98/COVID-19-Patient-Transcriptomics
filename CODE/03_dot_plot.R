@@ -1,167 +1,222 @@
-####################
-### dot plot ###
-####################
+# =============================================================================
+# Pathway Enrichment Dot Plot Visualization Script
+# =============================================================================
+# This script creates a dot plot to visualize KEGG pathway enrichment results.
+# The plot shows up-regulated and down-regulated pathways, with dot size and
+# color representing the number of genes and statistical significance, respectively.
 
-# load required packages
-library(ggplot2)
-library(ggpubr)
+# Load Required Packages
+library(ggplot2)  # For creating plots and graphics
+library(ggpubr)   # For arranging multiple plots together (ggarrange)
 
-# set working directory
+# Set Working Directory
+# Note: Update this path to match your project directory
 setwd("~/Project2")
 
 
 ####################
-### data prep ###
+### Data Preparation ###
 ####################
 
-# load data from previous script
+# Load Data from Previous Scripts
+# DGE results: differential gene expression analysis results
 dge_results <- read.csv("R/DGE_results.csv")
+# Pathways: gene-to-pathway mappings from KEGG database
 pathways <- read.csv("R/DGE_pathways.csv")
 
-# pathways shown in plot
+# Define Pathways of Interest to Display
+# Up-regulated pathways: typically immune response, inflammation, and signaling pathways
+# These are pathways enriched in COVID-19 patients compared to controls
 up_paths <- c("Cytokine-cytokine receptor interaction", "JAK-STAT signaling pathway",
               "Complement and coagulation cascades", "Hematopoietic cell lineage",
               "Chemokine signaling pathway", "Inflammatory bowel disease",
               "Toll-like receptor signaling pathway", "IL-17 signaling pathway",
               "TGF-beta signaling pathway", "Th1 and Th2 cell differentiation")
 
+# Down-regulated pathways: typically metabolic and cellular function pathways
+# These are pathways that show reduced activity in COVID-19 patients
 down_paths <- c("Ribosome", "Oxidative phosphorylation", "Viral myocarditis",
                 "Protein processing in endoplasmic reticulum", "Oxytocin signaling pathway",
                 "Type I diabetes mellitus", "Phagosome", "Amyotrophic lateral sclerosis",
                 "Ferroptosis", "Allograft rejection")
 
-# subset by those pathways
+# Filter Pathways to Only Include Those of Interest
+# This reduces the dataset to pathways we want to visualize
 pathways <- subset(pathways, Pathway %in% c(up_paths, down_paths))
 
-# combine with DGE results
+# Merge Pathway Data with DGE Results
+# This adds gene expression statistics (fold change, p-values) to pathway information
+# Links each gene in a pathway with its differential expression results
 pathways <- merge(pathways, dge_results, by = "Gene")
 
 
 ####################
-### average p values ###
+### Calculate Pathway Statistics ###
 ####################
 
-# create empty columns for number of genes per pathway ...
+# Create Empty Columns for Pathway-Level Summaries
+# NumGenes: total number of genes in each pathway that are in our dataset
 pathways$NumGenes <- NA
 
-# ... and the mean adjusted p value per pathway
+# pMean: mean adjusted p-value (padj) for all genes in each pathway
+# Lower values indicate more significant enrichment
 pathways$pMean <- NA
 
-for (path in c(up_paths, down_paths)) {                  # loop through pathway names
-  df <- subset(pathways, Pathway == path)                # subset pathway data by pathway name
-  n <- length(df$Gene)                                   # get number of genes in that pathway
-  p <- mean(df$padj)                                     # calculate mean adjusted p value
-  pathways$NumGenes[pathways$Pathway == path] <- n       # add number of genes to column
-  pathways$pMean[pathways$Pathway == path] <- p          # add mean p value to column
+# Calculate Statistics for Each Pathway
+# Loop through each pathway and compute summary statistics
+for (path in c(up_paths, down_paths)) {                  # Iterate through pathway names
+  df <- subset(pathways, Pathway == path)                # Extract data for this pathway
+  n <- length(df$Gene)                                   # Count unique genes in pathway
+  p <- mean(df$padj)                                     # Calculate mean adjusted p-value
+  pathways$NumGenes[pathways$Pathway == path] <- n       # Store gene count
+  pathways$pMean[pathways$Pathway == path] <- p          # Store mean p-value
 }
 
-# subset to up/down regulated pathways
+# Create Summary Data Frame
+# Extract unique pathway-level summaries (one row per pathway)
 pathways <- unique(pathways[c("Pathway", "NumGenes", "pMean")])
+
+# Split Pathways into Up- and Down-Regulated Groups
+# This allows us to plot them separately with different styling
 up_pathways <- subset(pathways, Pathway %in% up_paths)
 down_pathways <- subset(pathways, Pathway %in% down_paths)
 
 
 ####################
-### up-regulated pathways plot ###
+### Basic Up-Regulated Pathways Plot ###
 ####################
 
-# base plot for up-regulated pathways
+# Create Basic Dot Plot for Up-Regulated Pathways
+# X-axis: Number of genes in the pathway (indicates pathway size/coverage)
+# Y-axis: Pathway names (one row per pathway)
+# Color: Mean adjusted p-value (darker/lighter indicates statistical significance)
+# Size: Number of genes (larger dots = more genes in pathway)
 ggplot(up_pathways,
-       aes(x = NumGenes,             # x-axis: number of genes
-           y = Pathway,              # y-axis: pathway name
-           color = pMean,            # color mapped to mean adjusted p-value
-           size = NumGenes)) +       # size mapped to number of genes
-  geom_point()
+       aes(x = NumGenes,             # X-axis: number of genes per pathway
+           y = Pathway,              # Y-axis: pathway names (categorical)
+           color = pMean,            # Color scale: mean adjusted p-value (significance)
+           size = NumGenes)) +       # Point size: number of genes (redundant but useful)
+  geom_point()                       # Create dot plot
 
 
 ####################
-### order axis ###
+### Order Pathways by Gene Count ###
 ####################
 
-# y axis is ordered by number of genes
+# Create Ordered List of Pathways
+# Order pathways by number of genes (ascending: smallest to largest)
+# This will be used to arrange pathways from bottom to top in the plot
 up_order <- up_pathways$Pathway[order(up_pathways$NumGenes)]
 
-### BASE
+### BASE PLOT LAYER
 ggplot(up_pathways, aes(x = NumGenes, y = Pathway)) +
   
-  ### PLOT
-  geom_point(aes(color = pMean, size = NumGenes)) +
-  scale_y_discrete(limits = up_order)  # order y axis
+  ### PLOT ELEMENTS
+  geom_point(aes(color = pMean, size = NumGenes)) +     # Colored and sized dots
+  scale_y_discrete(limits = up_order)                    # Apply custom ordering to y-axis
+                                                        # Pathways ordered by gene count
 
 
 
 ####################
-### up-regulated pathways ###
+### Final Up-Regulated Pathways Plot ###
 ####################
 
-# order y-axis by number of genes (largest at top)
+# Order Pathways by Number of Genes (Ascending Order)
+# Smallest pathways at bottom, largest at top
 up_order <- up_pathways$Pathway[order(up_pathways$NumGenes)]
 
+# Create Finalized Up-Regulated Pathways Plot
 up.plot <-
   ggplot(up_pathways, aes(x = NumGenes, y = Pathway)) +
-  geom_point(aes(color = pMean, size = NumGenes)) +
-  scale_y_discrete(limits = up_order) +                        # reorder by NumGenes
+  
+  # Plot Elements
+  geom_point(aes(color = pMean, size = NumGenes)) +           # Colored and sized dots
+  
+  # Customize Y-Axis Ordering
+  scale_y_discrete(limits = up_order) +                        # Order pathways by gene count
+  
+  # Color Scale: Blue (low p-value, significant) to Red (high p-value, less significant)
+  # Use full range from all pathways for consistent color scale across plots
   scale_color_gradient(low = "blue", high = "red",
                        limits = c(min(pathways$pMean, na.rm = TRUE),
                                   max(pathways$pMean, na.rm = TRUE))) +
+  
+  # Size Scale: Consistent size range across both plots
+  # Ensures dot sizes are comparable between up and down plots
   scale_size_continuous(limits = c(min(pathways$NumGenes, na.rm = TRUE),
                                    max(pathways$NumGenes, na.rm = TRUE))) +
-  theme_light() +
-  theme(axis.title = element_blank()) +
-  labs(color = "Mean\nadjusted\np-value",
-       size  = "Number\nof genes")
+  
+  # Theme and Labels
+  theme_light() +                                              # Light theme with grid
+  theme(axis.title = element_blank()) +                       # Remove axis titles
+  labs(color = "Mean\nadjusted\np-value",                     # Legend for color
+       size  = "Number\nof genes")                            # Legend for size
 
-# show the plot
+# Display the Plot
 print(up.plot)
 
 
 
 ####################
-### down-regulated pathways ###
+### Down-Regulated Pathways Plot ###
 ####################
 
-# order y axis by number of genes
+# Order Down-Regulated Pathways by Number of Genes (Ascending Order)
 down_order <- down_pathways$Pathway[order(down_pathways$NumGenes)]
 
-### BASE
+### BASE PLOT LAYER
 down.plot <-
   ggplot(down_pathways, aes(x = NumGenes, y = Pathway)) +
   
-  ### PLOT
-  geom_point(aes(color = pMean, size = NumGenes)) +
-  scale_y_discrete(limits = down_order, position = "right") +  # ordered y-axis on the right
-  scale_x_reverse() +                                          # reverse x-axis
+  ### PLOT ELEMENTS
+  geom_point(aes(color = pMean, size = NumGenes)) +           # Colored and sized dots
+  
+  # Customize Axes for Mirror Effect
+  scale_y_discrete(limits = down_order, position = "right") +  # Y-axis labels on right side
+  scale_x_reverse() +                                          # Reverse x-axis (mirror effect)
+                                                               # Creates back-to-back appearance
+  
+  # Color Scale: Same as up-regulated plot for consistency
   scale_color_gradient(low = "blue", high = "red",
                        limits = c(min(pathways$pMean, na.rm = TRUE),
                                   max(pathways$pMean, na.rm = TRUE))) +
+  
+  # Size Scale: Same range as up-regulated plot
   scale_size_continuous(limits = c(min(pathways$NumGenes, na.rm = TRUE),
                                    max(pathways$NumGenes, na.rm = TRUE))) +
-  theme_light() +
-  theme(axis.title = element_blank()) +
-  labs(color = "Mean\nadjusted\np-value",
-       size  = "Number\nof genes")
+  
+  # Theme and Labels
+  theme_light() +                                              # Light theme with grid
+  theme(axis.title = element_blank()) +                       # Remove axis titles
+  labs(color = "Mean\nadjusted\np-value",                     # Legend for color
+       size  = "Number\nof genes")                            # Legend for size
 
-# display the plot
+# Display the Plot
 print(down.plot)
 
 
 
 ####################
-### combine ###
+### Combine Up and Down Plots ###
 ####################
 
-library(ggpubr)  # ensure loaded for ggarrange()
+# Ensure ggpubr Package is Loaded (for ggarrange function)
+library(ggpubr)  # Package for arranging multiple plots
 
+# Combine Both Plots into a Single Figure
+# Creates a back-to-back dot plot showing both up- and down-regulated pathways
 dot.plot <-
   ggarrange(up.plot, down.plot,
-            ncol = 1,              # stack vertically
-            common.legend = TRUE,  # shared legend
-            legend = "right",      # legend on right
-            bgcolor = "white")     # white background
+            ncol = 1,              # Stack plots vertically (up on top, down on bottom)
+            common.legend = TRUE,  # Use a single shared legend (color and size scales)
+            legend = "right",      # Place legend on the right side of the figure
+            bgcolor = "white")     # White background color
 
-# display the combined figure
+# Display the Combined Figure
 print(dot.plot)
 
-# export to PDF
+# Export Combined Plot to PDF
+# Save the final figure for publication or presentation
 ggsave("PLOTS/dot.pdf", dot.plot,
        width = 6, height = 10, units = "in")
